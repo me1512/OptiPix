@@ -155,96 +155,98 @@ export async function generatePWAIcons(
     splashSizes: { width: number; height: number }[];
     backgroundColor: string;
   }
-): Promise<File> {
+): Promise<{
+  zip: File;
+  previews: { name: string; url: string; type: "icon" | "splash" }[];
+}> {
   try {
-    // Generate icons
-    const iconCanvases = await Promise.all(
+    const JSZip = (await import("jszip")).default;
+    const zip = new JSZip();
+
+    const previews: { name: string; url: string; type: "icon" | "splash" }[] = [];
+
+    // Add icons
+    await Promise.all(
       options.iconSizes.map(async (size) => {
-        const resized = await resizeImage(file, size, size);
-        return await createCanvasFromFile(resized);
+        const canvas = await createCanvasFromFile(await resizeImage(file, size, size));
+        const blob = await new Promise<Blob | null>((resolve) =>
+          canvas.toBlob(resolve, "image/png")
+        );
+        if (blob) {
+          const name = `icon-${size}x${size}.png`;
+          zip.file(name, blob);
+          previews.push({
+            name,
+            type: "icon",
+            url: URL.createObjectURL(blob),
+          });
+        }
       })
     );
 
-    // Generate splash screens
-    const splashCanvases = await Promise.all(
+    // Add splash screens
+    await Promise.all(
       options.splashSizes.map(async ({ width, height }) => {
-        const canvas = document.createElement('canvas');
+        const canvas = document.createElement("canvas");
         canvas.width = width;
         canvas.height = height;
-        const ctx = canvas.getContext('2d');
-        if (!ctx) throw new Error('Could not create canvas context');
+        const ctx = canvas.getContext("2d");
+        if (!ctx) throw new Error("Could not create canvas context");
 
-        // Fill background
         ctx.fillStyle = options.backgroundColor;
         ctx.fillRect(0, 0, width, height);
 
-        // Calculate centered image dimensions (80% of smallest dimension)
+        const img = await createImageFromFile(file);
         const imageSize = Math.min(width, height) * 0.8;
         const x = (width - imageSize) / 2;
         const y = (height - imageSize) / 2;
-
-        // Draw centered image
-        const img = await createImageFromFile(file);
         ctx.drawImage(img, x, y, imageSize, imageSize);
 
-        return canvas;
-      })
-    );
-
-    // Create zip file containing all assets
-    const JSZip = (await import('jszip')).default;
-    const zip = new JSZip();
-
-    // Add icons to zip
-    await Promise.all(
-      iconCanvases.map(async (canvas, i) => {
         const blob = await new Promise<Blob | null>((resolve) =>
-          canvas.toBlob(resolve, 'image/png')
+          canvas.toBlob(resolve, "image/png")
         );
         if (blob) {
-          zip.file(`icon-${options.iconSizes[i]}x${options.iconSizes[i]}.png`, blob);
+          const name = `splash-${width}x${height}.png`;
+          zip.file(name, blob);
+          previews.push({
+            name,
+            type: "splash",
+            url: URL.createObjectURL(blob),
+          });
         }
       })
     );
 
-    // Add splash screens to zip
-    await Promise.all(
-      splashCanvases.map(async (canvas, i) => {
-        const blob = await new Promise<Blob | null>((resolve) =>
-          canvas.toBlob(resolve, 'image/png')
-        );
-        if (blob) {
-          zip.file(
-            `splash-${options.splashSizes[i].width}x${options.splashSizes[i].height}.png`,
-            blob
-          );
-        }
-      })
-    );
-
-    // Generate manifest.json
+    // Add manifest.json
     const manifest = {
-      name: 'My PWA',
-      short_name: 'PWA',
+      name: "My PWA",
+      short_name: "PWA",
       icons: options.iconSizes.map((size) => ({
         src: `icon-${size}x${size}.png`,
         sizes: `${size}x${size}`,
-        type: 'image/png',
+        type: "image/png",
       })),
       background_color: options.backgroundColor,
       theme_color: options.backgroundColor,
-      display: 'standalone',
+      display: "standalone",
     };
-    zip.file('manifest.json', JSON.stringify(manifest, null, 2));
+    zip.file("manifest.json", JSON.stringify(manifest, null, 2));
 
-    // Generate the zip file
-    const zipContent = await zip.generateAsync({ type: 'blob' });
-    return new File([zipContent], 'pwa-assets.zip', { type: 'application/zip' });
+    const zipContent = await zip.generateAsync({ type: "blob" });
+    const zipFile = new File([zipContent], "pwa-assets.zip", {
+      type: "application/zip",
+    });
+
+    return {
+      zip: zipFile,
+      previews,
+    };
   } catch (error) {
-    console.error('PWA assets generation error:', error);
+    console.error("PWA assets generation error:", error);
     throw error;
   }
 }
+
 
 // Helper functions
 async function createCanvasFromFile(file: File): Promise<HTMLCanvasElement> {

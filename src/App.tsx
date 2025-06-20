@@ -1,5 +1,6 @@
 import { AnimatePresence, motion } from "framer-motion";
 import { useEffect, useRef, useState, type ChangeEvent } from "react";
+import { Toaster } from 'sonner';
 import {
   generateFavicon,
   generatePWAIcons,
@@ -22,7 +23,9 @@ type OptimizedFile = {
 export default function ImageOptimizer() {
   const [files, setFiles] = useState<OptimizedFile[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
-  const [activeTab, setActiveTab] = useState<"optimize" | "favicon" | "pwa">("optimize");
+  const [activeTab, setActiveTab] = useState<"optimize" | "favicon" | "pwa">(
+    "optimize",
+  );
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [inputFiles, setInputFiles] = useState<File[]>([]);
 
@@ -48,8 +51,23 @@ export default function ImageOptimizer() {
     backgroundColor: "#ffffff",
   });
 
+  const revokeObjectURLs = (filesToClean: OptimizedFile[]) => {
+    filesToClean.forEach((file) => {
+      URL.revokeObjectURL(file.previewUrl);
+      if (file.optimizedPreviewUrl)
+        URL.revokeObjectURL(file.optimizedPreviewUrl);
+      file.extraPreviews?.forEach((preview) =>
+        URL.revokeObjectURL(preview.url),
+      );
+    });
+  };
+
   const processFiles = async (inputFiles: File[]) => {
     setIsProcessing(true);
+
+    // ✅ Clean up previous URLs to avoid memory leaks and ensure fresh previews
+    revokeObjectURLs(files);
+
     const newFiles: OptimizedFile[] = [];
 
     for (const file of inputFiles) {
@@ -64,11 +82,15 @@ export default function ImageOptimizer() {
           optimizedFile = zip;
 
           const extraPreviews = previews.map(
-            (preview: { name: string; url: string; type: "icon" | "splash" }) => ({
+            (preview: {
+              name: string;
+              url: string;
+              type: "icon" | "splash";
+            }) => ({
               name: preview.name,
               url: preview.url,
               type: preview.type,
-            })
+            }),
           );
 
           newFiles.push({
@@ -118,7 +140,15 @@ export default function ImageOptimizer() {
     if (inputFiles.length > 0) {
       processFiles(inputFiles);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [options, faviconOptions, pwaOptions, activeTab]);
+
+  useEffect(() => {
+    // 🧹 Cleanup on component unmount
+    return () => {
+      revokeObjectURLs(files);
+    };
+  }, [files]);
 
   const handleDownload = (file: OptimizedFile) => {
     const link = document.createElement("a");
@@ -130,10 +160,15 @@ export default function ImageOptimizer() {
   };
 
   const handleRemove = (index: number) => {
+    const removed = files[index];
+    URL.revokeObjectURL(removed.previewUrl);
+    if (removed.optimizedPreviewUrl)
+      URL.revokeObjectURL(removed.optimizedPreviewUrl);
+    removed.extraPreviews?.forEach((preview) =>
+      URL.revokeObjectURL(preview.url),
+    );
+
     const newFiles = [...files];
-    URL.revokeObjectURL(newFiles[index].previewUrl);
-    if (newFiles[index].optimizedPreviewUrl)
-      URL.revokeObjectURL(newFiles[index].optimizedPreviewUrl);
     newFiles.splice(index, 1);
     setFiles(newFiles);
   };
@@ -144,6 +179,7 @@ export default function ImageOptimizer() {
 
   return (
     <div className="min-h-screen bg-gray-100 p-6">
+      <Toaster position="top-right" richColors closeButton />
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -154,7 +190,7 @@ export default function ImageOptimizer() {
           className="mb-6 text-2xl font-bold text-gray-800"
           whileHover={{ scale: 1.02 }}
         >
-          Image Optimizer Pro
+          Smart Image Optimizer
         </motion.h1>
 
         {/* Navigation Tabs */}
@@ -205,6 +241,7 @@ export default function ImageOptimizer() {
                       <option value="webp">WebP</option>
                       <option value="jpeg">JPEG</option>
                       <option value="png">PNG</option>
+                      <option value="avif">AVIF</option>
                       <option value="original">Original Format</option>
                     </select>
                   </div>
@@ -452,7 +489,7 @@ export default function ImageOptimizer() {
           )}
         </motion.button>
 
-        {/* Results */}
+        {/* Preview/Results Section */}
         {files.length > 0 && (
           <motion.div
             initial={{ opacity: 0 }}
@@ -508,29 +545,29 @@ export default function ImageOptimizer() {
                           `Optimized: ${(file.optimized.size / 1024).toFixed(2)} KB (${file.reductionPercent.toFixed(1)}% smaller)`}
                         {activeTab === "favicon" &&
                           `Generated Favicon: ${(file.optimized.size / 1024).toFixed(2)} KB`}
-                        {activeTab === "pwa" && file.extraPreviews && (
-                          <div className="grid grid-cols-2 gap-4">
-                            {file.extraPreviews.map((asset) => (
-                              <div key={asset.name}>
-                                <div className="mb-1 text-sm text-gray-600">
-                                  {asset.type.toUpperCase()}: {asset.name}
-                                </div>
-                                <img
-                                  src={asset.url}
-                                  alt={asset.name}
-                                  className="w-full rounded border border-gray-200"
-                                />
-                              </div>
-                            ))}
-                          </div>
-                        )}
                       </div>
-                      {file.previewUrl && file.optimizedPreviewUrl && (
+                      {file.optimizedPreviewUrl && (
                         <img
                           src={file.optimizedPreviewUrl}
                           alt="Optimized"
                           className="h-auto w-full rounded border border-gray-200"
                         />
+                      )}
+                      {activeTab === "pwa" && file.extraPreviews && (
+                        <div className="mt-2 grid grid-cols-2 gap-4">
+                          {file.extraPreviews.map((asset) => (
+                            <div key={asset.name}>
+                              <div className="mb-1 text-sm text-gray-600">
+                                {asset.type.toUpperCase()}: {asset.name}
+                              </div>
+                              <img
+                                src={asset.url}
+                                alt={asset.name}
+                                className="w-full rounded border border-gray-200"
+                              />
+                            </div>
+                          ))}
+                        </div>
                       )}
                     </div>
                   </div>

@@ -1,3 +1,8 @@
+// imageOptimization.ts
+
+import { toast } from 'sonner';
+
+
 export async function convertToWebP(file: File, quality = 80): Promise<File> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -8,23 +13,115 @@ export async function convertToWebP(file: File, quality = 80): Promise<File> {
         canvas.width = img.width;
         canvas.height = img.height;
         const ctx = canvas.getContext('2d');
-        if (!ctx) {
-          reject(new Error('Could not create canvas context'));
-          return;
-        }
+        if (!ctx) return reject(new Error('Could not create canvas context'));
         ctx.drawImage(img, 0, 0);
         canvas.toBlob(
           (blob) => {
-            if (!blob) {
-              reject(new Error('Canvas to Blob conversion failed'));
-              return;
-            }
+            if (!blob) return reject(new Error('Canvas to Blob conversion failed'));
             const newFile = new File([blob], file.name.replace(/\.[^/.]+$/, '') + '.webp', {
               type: 'image/webp',
             });
             resolve(newFile);
           },
           'image/webp',
+          quality / 100
+        );
+      };
+      img.onerror = () => reject(new Error('Image loading error'));
+      img.src = event.target?.result as string;
+    };
+    reader.onerror = () => reject(new Error('File reading error'));
+    reader.readAsDataURL(file);
+  });
+}
+
+export async function convertToAVIF(file: File, quality = 80): Promise<File> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        canvas.width = img.width;
+        canvas.height = img.height;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return reject(new Error('Could not create canvas context'));
+        ctx.drawImage(img, 0, 0);
+        canvas.toBlob(
+          (blob) => {
+            if (!blob) return reject(new Error('Canvas to Blob conversion failed'));
+            const newFile = new File([blob], file.name.replace(/\.[^/.]+$/, '') + '.avif', {
+              type: 'image/avif',
+            });
+            resolve(newFile);
+          },
+          'image/avif',
+          quality / 100
+        );
+      };
+      img.onerror = () => reject(new Error('Image loading error'));
+      img.src = event.target?.result as string;
+    };
+    reader.onerror = () => reject(new Error('File reading error'));
+    reader.readAsDataURL(file);
+  });
+}
+
+export async function convertToJPEG(file: File, quality: number): Promise<File> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        canvas.width = img.width;
+        canvas.height = img.height;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return reject(new Error('Could not create canvas context'));
+        ctx.fillStyle = '#fff';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(img, 0, 0);
+        canvas.toBlob(
+          (blob) => {
+            if (!blob) return reject(new Error('Canvas to Blob conversion failed'));
+            const newFile = new File([blob], file.name.replace(/\.[^/.]+$/, '') + '.jpg', {
+              type: 'image/jpeg',
+            });
+            resolve(newFile);
+          },
+          'image/jpeg',
+          quality / 100
+        );
+      };
+      img.onerror = () => reject(new Error('Image loading error'));
+      img.src = event.target?.result as string;
+    };
+    reader.onerror = () => reject(new Error('File reading error'));
+    reader.readAsDataURL(file);
+  });
+}
+
+export async function convertToPNG(file: File, quality: number): Promise<File> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        canvas.width = img.width;
+        canvas.height = img.height;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return reject(new Error('Could not create canvas context'));
+        ctx.drawImage(img, 0, 0);
+        canvas.toBlob(
+          (blob) => {
+            if (!blob) return reject(new Error('Canvas to Blob conversion failed'));
+            const newFile = new File([blob], file.name.replace(/\.[^/.]+$/, '') + '.png', {
+              type: 'image/png',
+            });
+            resolve(newFile);
+          },
+          'image/png',
           quality / 100
         );
       };
@@ -46,17 +143,11 @@ export async function resizeImage(file: File, width: number, height: number): Pr
         canvas.width = width;
         canvas.height = height;
         const ctx = canvas.getContext('2d');
-        if (!ctx) {
-          reject(new Error('Could not create canvas context'));
-          return;
-        }
+        if (!ctx) return reject(new Error('Could not create canvas context'));
         ctx.drawImage(img, 0, 0, width, height);
         canvas.toBlob(
           (blob) => {
-            if (!blob) {
-              reject(new Error('Canvas to Blob conversion failed'));
-              return;
-            }
+            if (!blob) return reject(new Error('Canvas to Blob conversion failed'));
             const newFile = new File([blob], file.name, {
               type: file.type,
             });
@@ -77,7 +168,7 @@ export async function resizeImage(file: File, width: number, height: number): Pr
 export async function optimizeImage(
   file: File,
   options: {
-    format: 'webp' | 'jpeg' | 'png' | 'original';
+    format: 'webp' | 'jpeg' | 'png' | 'avif' | 'original';
     quality: number;
     maxWidth?: number;
     maxHeight?: number;
@@ -86,19 +177,25 @@ export async function optimizeImage(
   try {
     let processedFile = file;
 
-    // Resize if dimensions are specified
     if (options.maxWidth && options.maxHeight) {
       processedFile = await resizeImage(processedFile, options.maxWidth, options.maxHeight);
     }
 
-    // Convert format if requested (and not original)
     if (options.format !== 'original') {
-      if (options.format === 'webp') {
-        processedFile = await convertToWebP(processedFile, options.quality);
-      } else if (options.format === 'jpeg') {
-        processedFile = await convertToJPEG(processedFile, options.quality);
-      } else if (options.format === 'png') {
-        processedFile = await convertToPNG(processedFile, options.quality);
+      switch (options.format) {
+        case 'webp':
+          processedFile = await convertToWebP(processedFile, options.quality);
+          break;
+        case 'jpeg':
+          processedFile = await convertToJPEG(processedFile, options.quality);
+          break;
+        case 'png':
+          toast.warning('PNG quality parameter has no effect; size might increase.');
+          processedFile = await convertToPNG(processedFile, options.quality);
+          break;
+        case 'avif':
+          processedFile = await convertToAVIF(processedFile, options.quality);
+          break;
       }
     }
 
@@ -116,35 +213,25 @@ export async function generateFavicon(
     outputFormat: 'ico' | 'png';
   }
 ): Promise<File> {
-  try {
-    // Create canvas for each size
-    const canvases = await Promise.all(
-      options.sizes.map(async (size) => {
-        const resized = await resizeImage(file, size, size);
-        return await createCanvasFromFile(resized);
-      })
-    );
+  const canvases = await Promise.all(
+    options.sizes.map(async (size) => {
+      const resized = await resizeImage(file, size, size);
+      return await createCanvasFromFile(resized);
+    })
+  );
 
-    if (options.outputFormat === 'ico') {
-      // Generate ICO file
-      return await generateIcoFile(canvases);
-    } else {
-      // For PNG, we'll just return the largest size
-      const largestSize = Math.max(...options.sizes);
-      const largestIndex = options.sizes.indexOf(largestSize);
-      const blob = await new Promise<Blob | null>((resolve) =>
-        canvases[largestIndex].toBlob(resolve, 'image/png')
-      );
-      
-      if (!blob) throw new Error('Failed to create PNG blob');
-      
-      return new File([blob], `favicon-${largestSize}x${largestSize}.png`, {
-        type: 'image/png',
-      });
-    }
-  } catch (error) {
-    console.error('Favicon generation error:', error);
-    throw error;
+  if (options.outputFormat === 'ico') {
+    return await generateIcoFile(canvases);
+  } else {
+    const largestSize = Math.max(...options.sizes);
+    const index = options.sizes.indexOf(largestSize);
+    const blob = await new Promise<Blob | null>((resolve) =>
+      canvases[index].toBlob(resolve, 'image/png')
+    );
+    if (!blob) throw new Error('Failed to create PNG blob');
+    return new File([blob], `favicon-${largestSize}x${largestSize}.png`, {
+      type: 'image/png',
+    });
   }
 }
 
@@ -157,101 +244,76 @@ export async function generatePWAIcons(
   }
 ): Promise<{
   zip: File;
-  previews: { name: string; url: string; type: "icon" | "splash" }[];
+  previews: { name: string; url: string; type: 'icon' | 'splash' }[];
 }> {
-  try {
-    const JSZip = (await import("jszip")).default;
-    const zip = new JSZip();
+  const JSZip = (await import('jszip')).default;
+  const zip = new JSZip();
+  const previews: { name: string; url: string; type: 'icon' | 'splash' }[] = [];
 
-    const previews: { name: string; url: string; type: "icon" | "splash" }[] = [];
-
-    // Add icons
-    await Promise.all(
-      options.iconSizes.map(async (size) => {
-        const canvas = await createCanvasFromFile(await resizeImage(file, size, size));
-        const blob = await new Promise<Blob | null>((resolve) =>
-          canvas.toBlob(resolve, "image/png")
-        );
-        if (blob) {
-          const name = `icon-${size}x${size}.png`;
-          zip.file(name, blob);
-          previews.push({
-            name,
-            type: "icon",
-            url: URL.createObjectURL(blob),
-          });
-        }
-      })
-    );
-
-    // Add splash screens
-    await Promise.all(
-      options.splashSizes.map(async ({ width, height }) => {
-        const canvas = document.createElement("canvas");
-        canvas.width = width;
-        canvas.height = height;
-        const ctx = canvas.getContext("2d");
-        if (!ctx) throw new Error("Could not create canvas context");
-
-        ctx.fillStyle = options.backgroundColor;
-        ctx.fillRect(0, 0, width, height);
-
-        const img = await createImageFromFile(file);
-        const imageSize = Math.min(width, height) * 0.8;
-        const x = (width - imageSize) / 2;
-        const y = (height - imageSize) / 2;
-        ctx.drawImage(img, x, y, imageSize, imageSize);
-
-        const blob = await new Promise<Blob | null>((resolve) =>
-          canvas.toBlob(resolve, "image/png")
-        );
-        if (blob) {
-          const name = `splash-${width}x${height}.png`;
-          zip.file(name, blob);
-          previews.push({
-            name,
-            type: "splash",
-            url: URL.createObjectURL(blob),
-          });
-        }
-      })
-    );
-
-    // Add manifest.json
-    const manifest = {
-      name: "My PWA",
-      short_name: "PWA",
-      icons: options.iconSizes.map((size) => ({
-        src: `icon-${size}x${size}.png`,
-        sizes: `${size}x${size}`,
-        type: "image/png",
-      })),
-      background_color: options.backgroundColor,
-      theme_color: options.backgroundColor,
-      display: "standalone",
-    };
-    zip.file("manifest.json", JSON.stringify(manifest, null, 2));
-
-    const zipContent = await zip.generateAsync({ type: "blob" });
-    const zipFile = new File([zipContent], "pwa-assets.zip", {
-      type: "application/zip",
-    });
-
-    return {
-      zip: zipFile,
-      previews,
-    };
-  } catch (error) {
-    console.error("PWA assets generation error:", error);
-    throw error;
+  for (const size of options.iconSizes) {
+    const canvas = await createCanvasFromFile(await resizeImage(file, size, size));
+    const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/png'));
+    if (blob) {
+      const name = `icon-${size}x${size}.png`;
+      zip.file(name, blob);
+      previews.push({ name, type: 'icon', url: URL.createObjectURL(blob) });
+    }
   }
+
+  for (const { width, height } of options.splashSizes) {
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) throw new Error('Could not create canvas context');
+    ctx.fillStyle = options.backgroundColor;
+    ctx.fillRect(0, 0, width, height);
+
+    const img = await createImageFromFile(file);
+    const imageSize = Math.min(width, height) * 0.8;
+    const x = (width - imageSize) / 2;
+    const y = (height - imageSize) / 2;
+    ctx.drawImage(img, x, y, imageSize, imageSize);
+
+    const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/png'));
+    if (blob) {
+      const name = `splash-${width}x${height}.png`;
+      zip.file(name, blob);
+      previews.push({ name, type: 'splash', url: URL.createObjectURL(blob) });
+    }
+  }
+
+  zip.file(
+    'manifest.json',
+    JSON.stringify(
+      {
+        name: 'My PWA',
+        short_name: 'PWA',
+        icons: options.iconSizes.map((size) => ({
+          src: `icon-${size}x${size}.png`,
+          sizes: `${size}x${size}`,
+          type: 'image/png',
+        })),
+        background_color: options.backgroundColor,
+        theme_color: options.backgroundColor,
+        display: 'standalone',
+      },
+      null,
+      2
+    )
+  );
+
+  const zipBlob = await zip.generateAsync({ type: 'blob' });
+  return {
+    zip: new File([zipBlob], 'pwa-assets.zip', { type: 'application/zip' }),
+    previews,
+  };
 }
 
-
-// Helper functions
+// Helpers
 async function createCanvasFromFile(file: File): Promise<HTMLCanvasElement> {
+  const reader = new FileReader();
   return new Promise((resolve, reject) => {
-    const reader = new FileReader();
     reader.onload = (event) => {
       const img = new Image();
       img.onload = () => {
@@ -259,10 +321,7 @@ async function createCanvasFromFile(file: File): Promise<HTMLCanvasElement> {
         canvas.width = img.width;
         canvas.height = img.height;
         const ctx = canvas.getContext('2d');
-        if (!ctx) {
-          reject(new Error('Could not create canvas context'));
-          return;
-        }
+        if (!ctx) return reject(new Error('Could not create canvas context'));
         ctx.drawImage(img, 0, 0);
         resolve(canvas);
       };
@@ -275,8 +334,8 @@ async function createCanvasFromFile(file: File): Promise<HTMLCanvasElement> {
 }
 
 async function createImageFromFile(file: File): Promise<HTMLImageElement> {
+  const reader = new FileReader();
   return new Promise((resolve, reject) => {
-    const reader = new FileReader();
     reader.onload = (event) => {
       const img = new Image();
       img.onload = () => resolve(img);
@@ -289,99 +348,10 @@ async function createImageFromFile(file: File): Promise<HTMLImageElement> {
 }
 
 async function generateIcoFile(canvases: HTMLCanvasElement[]): Promise<File> {
-  // Note: In a real implementation, you would use a proper ICO encoder library
-  // This is a simplified version that just uses the largest PNG
-  
-  // Find largest canvas
-  const largestCanvas = canvases.reduce((prev, current) => 
-    (current.width > prev.width) ? current : prev
-  );
-  
+  const largestCanvas = canvases.reduce((a, b) => (a.width > b.width ? a : b));
   const blob = await new Promise<Blob | null>((resolve) =>
     largestCanvas.toBlob(resolve, 'image/png')
   );
-  
   if (!blob) throw new Error('Failed to create ICO blob');
-  
-  return new File([blob], 'favicon.ico', {
-    type: 'image/x-icon',
-  });
-}
-
-async function convertToJPEG(file: File, quality: number): Promise<File> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const img = new Image();
-      img.onload = () => {
-        const canvas = document.createElement('canvas');
-        canvas.width = img.width;
-        canvas.height = img.height;
-        const ctx = canvas.getContext('2d');
-        if (!ctx) {
-          reject(new Error('Could not create canvas context'));
-          return;
-        }
-        ctx.fillStyle = '#ffffff'; // White background for JPEG
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-        ctx.drawImage(img, 0, 0);
-        canvas.toBlob(
-          (blob) => {
-            if (!blob) {
-              reject(new Error('Canvas to Blob conversion failed'));
-              return;
-            }
-            const newFile = new File([blob], file.name.replace(/\.[^/.]+$/, '') + '.jpg', {
-              type: 'image/jpeg',
-            });
-            resolve(newFile);
-          },
-          'image/jpeg',
-          quality / 100
-        );
-      };
-      img.onerror = () => reject(new Error('Image loading error'));
-      img.src = event.target?.result as string;
-    };
-    reader.onerror = () => reject(new Error('File reading error'));
-    reader.readAsDataURL(file);
-  });
-}
-
-async function convertToPNG(file: File, quality: number): Promise<File> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const img = new Image();
-      img.onload = () => {
-        const canvas = document.createElement('canvas');
-        canvas.width = img.width;
-        canvas.height = img.height;
-        const ctx = canvas.getContext('2d');
-        if (!ctx) {
-          reject(new Error('Could not create canvas context'));
-          return;
-        }
-        ctx.drawImage(img, 0, 0);
-        canvas.toBlob(
-          (blob) => {
-            if (!blob) {
-              reject(new Error('Canvas to Blob conversion failed'));
-              return;
-            }
-            const newFile = new File([blob], file.name.replace(/\.[^/.]+$/, '') + '.png', {
-              type: 'image/png',
-            });
-            resolve(newFile);
-          },
-          'image/png',
-          quality / 100
-        );
-      };
-      img.onerror = () => reject(new Error('Image loading error'));
-      img.src = event.target?.result as string;
-    };
-    reader.onerror = () => reject(new Error('File reading error'));
-    reader.readAsDataURL(file);
-  });
+  return new File([blob], 'favicon.ico', { type: 'image/x-icon' });
 }
