@@ -1,4 +1,7 @@
+import React from "react";
 import { AnimatePresence, motion } from "framer-motion";
+import heic2any from "heic2any";
+import JSZip from "jszip";
 import { useEffect, useRef, useState, type ChangeEvent } from "react";
 import { Toaster } from 'sonner';
 import {
@@ -21,6 +24,22 @@ type OptimizedFile = {
 };
 
 export default function ImageOptimizer() {
+  // ...existing state and hooks
+  // Download All handler
+  const handleDownloadAll = async () => {
+    const zip = new JSZip();
+    files.forEach((file) => {
+      zip.file(file.optimized.name, file.optimized);
+    });
+    const blob = await zip.generateAsync({ type: "blob" });
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = "optimized-images.zip";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   const [files, setFiles] = useState<OptimizedFile[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
   const [activeTab, setActiveTab] = useState<"optimize" | "favicon" | "pwa">(
@@ -30,7 +49,7 @@ export default function ImageOptimizer() {
   const [inputFiles, setInputFiles] = useState<File[]>([]);
 
   const [options, setOptions] = useState({
-    format: "webp" as "webp" | "jpeg" | "png" | "original",
+    format: "webp" as "webp" | "jpeg" | "png" | "original" | "heic" | "avif",
     quality: 80,
     maxWidth: 0,
     maxHeight: 0,
@@ -71,7 +90,11 @@ export default function ImageOptimizer() {
     const newFiles: OptimizedFile[] = [];
 
     for (const file of inputFiles) {
-      if (!file.type.startsWith("image/")) continue;
+      if (!file.type.startsWith("image/") && !file.name.toLowerCase().endsWith('.heic')) continue;
+    if (file.type === 'image/heic' || file.name.toLowerCase().endsWith('.heic')) {
+      // Optionally, show a toast here or rely on optimizeImage for conversion notification
+      // toast.info('HEIC image detected and will be converted.');
+    }
 
       try {
         let optimizedFile;
@@ -104,7 +127,18 @@ export default function ImageOptimizer() {
 
           continue;
         } else {
-          optimizedFile = await optimizeImage(file, options);
+          switch (options.format) {
+            case "webp":
+            case "jpeg":
+            case "png":
+            case "avif":
+            case "heic":
+            case "original":
+              optimizedFile = await optimizeImage(file, options);
+              break;
+            default:
+              throw new Error(`Unsupported format: ${options.format}`);
+          }
         }
 
         const previewUrl = URL.createObjectURL(file);
@@ -234,7 +268,7 @@ export default function ImageOptimizer() {
                       onChange={(e) =>
                         setOptions({
                           ...options,
-                          format: e.target.value as any,
+                          format: e.target.value as "webp" | "jpeg" | "png" | "original" | "heic", 
                         })
                       }
                     >
@@ -242,6 +276,7 @@ export default function ImageOptimizer() {
                       <option value="jpeg">JPEG</option>
                       <option value="png">PNG</option>
                       <option value="avif">AVIF</option>
+                      <option value="heic">HEIC</option>
                       <option value="original">Original Format</option>
                     </select>
                   </div>
@@ -353,7 +388,7 @@ export default function ImageOptimizer() {
                       onChange={(e) =>
                         setFaviconOptions({
                           ...faviconOptions,
-                          outputFormat: e.target.value as any,
+                          outputFormat: e.target.value as "ico" | "png", 
                         })
                       }
                     >
@@ -458,7 +493,7 @@ export default function ImageOptimizer() {
           ref={fileInputRef}
           onChange={handleFileChange}
           className="hidden"
-          accept="image/*"
+          accept=".jpg,.jpeg,.png,.webp,.avif,.heic,image/heic"
           multiple={activeTab === "optimize"}
         />
 
@@ -531,13 +566,16 @@ export default function ImageOptimizer() {
                       <p className="mb-1 text-sm text-gray-600">
                         Original: {(file.original.size / 1024).toFixed(2)} KB
                       </p>
-                      {file.previewUrl && (
+                      {file.previewUrl && (file.original.type === "image/heic" || file.original.name.toLowerCase().endsWith(".heic")) ? (
+                        // Convert HEIC to previewable format for img src
+                        <HeicPreview file={file.original} />
+                      ) : file.previewUrl ? (
                         <img
                           src={file.previewUrl}
                           alt="Original"
                           className="h-auto w-full rounded border border-gray-200"
                         />
-                      )}
+                      ) : null}
                     </div>
                     <div>
                       <div className="mb-1 text-sm text-gray-600">
@@ -612,7 +650,42 @@ export default function ImageOptimizer() {
             </div>
           </motion.div>
         )}
+        {/* Download All Button */}
+        {files.length > 0 && (
+          <motion.button
+            onClick={handleDownloadAll}
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.98 }}
+            className="mt-4 w-full rounded-md bg-blue-700 px-4 py-2 font-medium text-white hover:bg-blue-800"
+          >
+            Download All Optimized Images (ZIP)
+          </motion.button>
+        )}
       </motion.div>
     </div>
   );
 }
+
+// Helper component for HEIC preview
+function HeicPreview({ file }: { file: File }) {
+  const [src, setSrc] = React.useState<string | null>(null);
+  React.useEffect(() => {
+    let isMounted = true;
+    const convert = async () => {
+      try {
+        const blob = await heic2any({ blob: file, toType: "image/jpeg" });
+        if (isMounted) setSrc(URL.createObjectURL(blob as Blob));
+      } catch {
+        setSrc(null);
+      }
+    };
+    convert();
+    return () => { isMounted = false; };
+  }, [file]);
+  return src ? (
+    <img src={src} alt="HEIC Preview" className="h-auto w-full rounded border border-gray-200" />
+  ) : (
+    <span className="text-red-500">Preview unavailable</span>
+  );
+}
+

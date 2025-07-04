@@ -165,10 +165,28 @@ export async function resizeImage(file: File, width: number, height: number): Pr
   });
 }
 
+import heic2any from 'heic2any';
+
+export async function convertFromHEIC(file: File, targetFormat: 'jpeg' | 'png' = 'jpeg', quality = 0.8): Promise<File> {
+  try {
+    const outputType = targetFormat === 'jpeg' ? 'image/jpeg' : 'image/png';
+    const blob = await heic2any({
+      blob: file,
+      toType: outputType,
+      quality: quality,
+    });
+    const ext = targetFormat === 'jpeg' ? '.jpg' : '.png';
+    return new File([blob as Blob], file.name.replace(/\.[^/.]+$/, '') + ext, { type: outputType });
+  } catch (error) {
+    toast.error('Failed to convert HEIC image.');
+    throw error;
+  }
+}
+
 export async function optimizeImage(
   file: File,
   options: {
-    format: 'webp' | 'jpeg' | 'png' | 'avif' | 'original';
+    format: 'webp' | 'jpeg' | 'png' | 'avif' | 'original' | 'heic';
     quality: number;
     maxWidth?: number;
     maxHeight?: number;
@@ -177,11 +195,17 @@ export async function optimizeImage(
   try {
     let processedFile = file;
 
+    // Detect HEIC input and convert to JPEG or PNG for browser compatibility
+    if (file.type === 'image/heic' || file.name.toLowerCase().endsWith('.heic')) {
+      toast.info('Converting HEIC image to JPEG for browser compatibility.');
+      processedFile = await convertFromHEIC(processedFile, 'jpeg', options.quality / 100);
+    }
+
     if (options.maxWidth && options.maxHeight) {
       processedFile = await resizeImage(processedFile, options.maxWidth, options.maxHeight);
     }
 
-    if (options.format !== 'original') {
+    if (options.format !== 'original' && options.format !== 'heic') {
       switch (options.format) {
         case 'webp':
           processedFile = await convertToWebP(processedFile, options.quality);
